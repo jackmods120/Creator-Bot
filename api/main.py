@@ -2717,7 +2717,7 @@ async def process_child_update(token: str, body: dict):
 
         msg = body.get("message") or body.get("channel_post")
 
-    # بۆ callback_query — پرۆسەسی تایبەت
+        # بۆ callback_query — پرۆسەسی تایبەت
         if body.get("callback_query"):
             cq       = body["callback_query"]
             cq_data  = cq.get("data","")
@@ -2727,50 +2727,7 @@ async def process_child_update(token: str, body: dict):
             cq_chat  = cq_msg.get("chat",{}).get("id")
             cq_mid   = cq_msg.get("message_id")
             bot_type = info.get("type","reaction")
-            
-            # --- دەستپێکی کۆدی نوێی ڕیاکشن ---
-            if bot_type == "reaction" and cq_data.startswith("react_"):
-                async with httpx.AsyncClient(timeout=10) as c:
-                    await c.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery", json={"callback_query_id": cq["id"]})
-                    
-                    chat_settings = await db_get(f"bot_settings/{bid}/{cq_chat}") or {"mode": "random", "emojis": []}
-                    
-                    if cq_data.startswith("react_tg_"):
-                        emo = cq_data.split("_")[2]
-                        chat_settings["mode"] = "custom"
-                        if emo in chat_settings["emojis"]: chat_settings["emojis"].remove(emo)
-                        else: chat_settings["emojis"].append(emo)
-                        await db_put(f"bot_settings/{bid}/{cq_chat}", chat_settings)
-                        
-                    elif cq_data == "react_rnd":
-                        chat_settings["mode"] = "random"
-                        chat_settings["emojis"] = []
-                        await db_put(f"bot_settings/{bid}/{cq_chat}", chat_settings)
-                        
-                    elif cq_data == "react_done":
-                        await c.post(f"https://api.telegram.org/bot{token}/deleteMessage", json={"chat_id": cq_chat, "message_id": cq_mid})
-                        return
 
-                    # دروستکردنەوەی کیبۆردی ئیمۆجییەکان (نمایشکردنی ٢٤ ئیمۆجی)
-                    keys = []
-                    row = []
-                    for e in EMOJIS[:24]:
-                        mark = "✅" if chat_settings.get("mode") == "custom" and e in chat_settings.get("emojis", []) else ""
-                        row.append({"text": f"{e}{mark}", "callback_data": f"react_tg_{e}"})
-                        if len(row) == 4:
-                            keys.append(row)
-                            row = []
-                    rnd_mark = "✅" if chat_settings.get("mode") == "random" else ""
-                    keys.append([{"text": f"🎲 هەڕەمەکی (Random) {rnd_mark}", "callback_data": "react_rnd"}])
-                    keys.append([{"text": "✅ پاشەکەوتکردن و داخستن", "callback_data": "react_done"}])
-                    
-                    await c.post(f"https://api.telegram.org/bot{token}/editMessageReplyMarkup", json={
-                        "chat_id": cq_chat, "message_id": cq_mid,
-                        "reply_markup": {"inline_keyboard": keys}
-                    })
-                return
-            # --- کۆتایی کۆدی نوێی ڕیاکشن ---
-            
             if bot_type == "weather" and cq_data.startswith("wfj_"):
                 async with httpx.AsyncClient(timeout=10) as c:
                     # پەسەندکردنی callback
@@ -3043,37 +3000,8 @@ async def process_child_update(token: str, body: dict):
                     "parse_mode": "HTML", "reply_markup": weather_kb_main(),
                 })
                 return
-# ════ بۆتی ڕیاکشن ═══════════════════════════════════════════════
-            if bot_type == "reaction" and txt.startswith("/react"):
-                # پشکنینی ئەدمین (تەنها ئەدمین و خاوەن دەتوانن بیگۆڕن)
-                if msg["chat"]["type"] in ["group", "supergroup"]:
-                    sender_id = from_user.get("id")
-                    cm_res = await send_tg(token, "getChatMember", {"chat_id": chat_id, "user_id": sender_id})
-                    status = cm_res.get("result", {}).get("status", "")
-                    if status not in ["creator", "administrator"]:
-                        return # نێرەر ئەدمین نییە بۆیە هیچ مەکە
 
-                chat_settings = await db_get(f"bot_settings/{bid}/{chat_id}") or {"mode": "random", "emojis": []}
-                keys = []
-                row = []
-                for e in EMOJIS[:24]:
-                    mark = "✅" if chat_settings.get("mode") == "custom" and e in chat_settings.get("emojis", []) else ""
-                    row.append({"text": f"{e}{mark}", "callback_data": f"react_tg_{e}"})
-                    if len(row) == 4:
-                        keys.append(row)
-                        row = []
-                rnd_mark = "✅" if chat_settings.get("mode") == "random" else ""
-                keys.append([{"text": f"🎲 هەڕەمەکی (Random) {rnd_mark}", "callback_data": "react_rnd"}])
-                keys.append([{"text": "✅ پاشەکەوتکردن و داخستن", "callback_data": "react_done"}])
-
-                async with httpx.AsyncClient(timeout=10) as c:
-                    await c.post(f"https://api.telegram.org/bot{token}/sendMessage", json={
-                        "chat_id": chat_id, "text": "⚙️ <b>ڕێکخستنی ڕیاکشنەکانی ئەم چاتە:</b>\nئەو ئیمۆجییانە هەڵبژێرە کە دەتەوێت بۆتەکە بۆ پۆستەکانی دابنێت:",
-                        "parse_mode": "HTML", "reply_markup": {"inline_keyboard": keys}
-                    })
-                    await c.post(f"https://api.telegram.org/bot{token}/deleteMessage", json={"chat_id": chat_id, "message_id": message_id})
-                return
-
+            # ════ بۆتی ڕیاکشن ═══════════════════════════════════════════════
             if txt.startswith("/start"):
                 # پشکنینی جۆینی ناچاری کەناڵ
                 if fj and req_chs and from_user.get("id"):
@@ -3129,12 +3057,7 @@ async def process_child_update(token: str, body: dict):
                     "parse_mode":"HTML","reply_markup":keyboard,"reply_to_message_id":message_id,
                 })
             else:
-                chat_settings = await db_get(f"bot_settings/{bid}/{chat_id}") or {"mode": "random", "emojis": []}
-                if chat_settings.get("mode") == "custom" and chat_settings.get("emojis"):
-                    emoji = random.choice(chat_settings["emojis"])
-                else:
-                    emoji = random.choice(EMOJIS)
-                    
+                emoji = random.choice(EMOJIS)
                 await c.post(f"https://api.telegram.org/bot{token}/setMessageReaction", json={
                     "chat_id":chat_id,"message_id":message_id,
                     "reaction":[{"type":"emoji","emoji":emoji}],"is_big":False,
